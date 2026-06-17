@@ -6,6 +6,8 @@ Your collection of Nushell HTTP clients, automatically generated from API specif
 **2,508** clients · **122,906** operations · **4.0M** lines of Nu
 <!-- STATS:END -->
 
+> [The full list](CLIENTS.md)
+
 ---
 
 1. [nu-http-client-collection](#nu-http-client-collection)
@@ -20,7 +22,6 @@ Your collection of Nushell HTTP clients, automatically generated from API specif
       3. [The bundled GitHub action](#the-bundled-github-action)
    4. [Contributing](#contributing)
 
-> [The full list of clients](CLIENTS.md)
 
 ---
 
